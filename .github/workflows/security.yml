@@ -11,25 +11,17 @@ permissions:
   pull-requests: write
 
 jobs:
-  secrets-vault:
-    name: Secrets Management (HashiCorp Vault)
+  secrets-scan:
+    name: Secrets (Gitleaks)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Start HashiCorp Vault Dev Server
+      - name: Gitleaks
         run: |
-          docker run -d --name vault -e 'VAULT_DEV_ROOT_TOKEN_ID=dev-root-token' -p 8200:8200 hashicorp/vault:latest
-          for i in $(seq 1 10); do curl -sf http://127.0.0.1:8200/v1/sys/health && break || sleep 1; done
-      - name: Store and Verify Secret Injection
-        run: |
-          docker exec -e VAULT_ADDR=http://127.0.0.1:8200 vault vault kv put secret/app api_key="vault_prod_secret_token"
-          if grep -rn "const API_KEY = \"" app.js; then
-            echo "❌ [HashiCorp Vault Violation]: Hardcoded secret detected in source code! Secrets must be retrieved from HashiCorp Vault at runtime."
-            exit 1
-          fi
-          echo "✅ Passed: No hardcoded secrets. Application complies with HashiCorp Vault external secrets management."
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 \
+            detect --no-git --source=/repo --verbose --redact
 
-  sca-snyk:
+  sca:
     name: Dependencies (SCA - Snyk)
     runs-on: ubuntu-latest
     steps:
@@ -37,78 +29,58 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Snyk Dependency Vulnerability Scan
-        run: |
-          echo "Running Snyk Open Source Vulnerability Scanner..."
-          npm audit --audit-level=high
+      - name: Snyk Security Scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
 
-  sast-sonarqube:
-    name: Code Analysis (SAST - SonarQube)
+  sast:
+    name: Code Analysis (SAST - SonarCloud / SonarQube)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: SonarQube Static Code Analysis
-        run: |
-          echo "Executing SonarQube Static Application Security Testing (SAST)..."
-          FAILURES=0
-          if grep -rn "eval(" app.js; then
-            echo "❌ [SonarQube Vulnerability: js:S1523] Avoid using 'eval' which can lead to Code Injection."
-            FAILURES=$((FAILURES + 1))
-          fi
-          if grep -rn "exec(" app.js; then
-            echo "❌ [SonarQube Vulnerability: js:S2076] OS command execution detected without input sanitization."
-            FAILURES=$((FAILURES + 1))
-          fi
-          if grep -rn "SELECT .* + " app.js; then
-            echo "❌ [SonarQube Vulnerability: js:S3649] User-controlled data used in SQL query (SQL Injection)."
-            FAILURES=$((FAILURES + 1))
-          fi
-          if [ $FAILURES -gt 0 ]; then
-            echo "❌ SonarQube Quality Gate: FAILED ($FAILURES Security Hotspots / Blocking Vulnerabilities found)"
-            exit 1
-          fi
-          echo "✅ SonarQube Quality Gate: PASSED (0 Vulnerabilities, 0 Security Hotspots)"
+        with:
+          fetch-depth: 0 # Full history is required by Sonar for accurate analysis
+      - name: SonarCloud / SonarQube Scan
+        uses: sonarsource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  iac-checkov:
-    name: Infrastructure as Code (Checkov)
+  dockerfile-lint:
+    name: Dockerfile lint (Hadolint)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Checkov IaC Security Scan
+      - name: Lint Dockerfile
         run: |
-          docker run --rm -v "$PWD:/work" bridgecrew/checkov:latest \
-            --framework kubernetes -f /work/k8s/deployment.yaml \
-            --check CKV_K8S_16,CKV_K8S_19,CKV_K8S_20 \
-            --compact
+          docker run --rm -i hadolint/hadolint:latest hadolint -t warning - < Dockerfile
 
-  runtime-falco:
-    name: Runtime Container Security (Falco Kubernetes)
+  container-and-k8s:
+    name: Image + IaC (Trivy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Falco Kubernetes Threat Detection Audit
-        run: |
-          echo "Auditing Kubernetes Deployment against Falco Runtime Security Policies..."
-          FAILURES=0
-          if grep -q "privileged: true" k8s/deployment.yaml; then
-            echo "🚨 [FALCO ALERT - Critical]: Container launched with privileged=true (Rule: Launch Privileged Container)"
-            FAILURES=$((FAILURES + 1))
-          fi
-          if grep -q "hostNetwork: true" k8s/deployment.yaml; then
-            echo "🚨 [FALCO ALERT - High]: Container sharing host network namespace (Rule: Share Host Network Namespace)"
-            FAILURES=$((FAILURES + 1))
-          fi
-          if grep -q "runAsUser: 0" k8s/deployment.yaml; then
-            echo "🚨 [FALCO ALERT - Warning]: Container running as root UID 0 (Rule: Root User in Container)"
-            FAILURES=$((FAILURES + 1))
-          fi
-          if [ $FAILURES -gt 0 ]; then
-            echo "❌ Falco Policy Engine: $FAILURES critical runtime threat(s) detected in container deployment!"
-            exit 1
-          fi
-          echo "✅ Falco Policy Engine: Kubernetes deployment is compliant with Falco runtime security baselines."
+      - name: Scan Dockerfile and k8s manifests
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Build image
+        run: docker build -t demo-app:${{ github.sha }} .
+      - name: Scan image for CVEs
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: demo-app:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
 
-  dast-zap:
+  dast:
     name: Runtime (DAST - OWASP ZAP)
     runs-on: ubuntu-latest
     steps:
@@ -118,7 +90,7 @@ jobs:
           docker build -t demo-app .
           docker run -d --name app --network host demo-app
           for i in $(seq 1 20); do curl -sf localhost:3000/health && break || sleep 1; done
-      - name: OWASP ZAP baseline scan
+      - name: ZAP baseline scan
         uses: zaproxy/action-baseline@v0.15.0
         with:
           target: http://localhost:3000
