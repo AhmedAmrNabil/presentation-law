@@ -1,0 +1,33 @@
+const express = require("express");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const API_KEY = process.env.API_KEY; // secrets come from the environment
+
+const users = [
+  { id: 1, name: "alice" },
+  { id: 2, name: "bob" },
+];
+
+app.use(helmet()); // HTTP security headers
+app.use(rateLimit({ windowMs: 60_000, limit: 100 })); // basic rate limiting
+app.use(express.json());
+
+app.get("/", (req, res) => res.json({ app: "secdevops-demo", status: "ok" }));
+app.get("/health", (req, res) => res.json({ healthy: true }));
+
+app.get("/greet", (req, res) => {
+  const name = String(req.query.name || "world").slice(0, 50);
+  res.json({ message: `Hello, ${name}!` });
+});
+
+app.get("/users/:id", (req, res) => {
+  const id = Number.parseInt(req.params.id, 10); // validated input
+  const user = users.find((u) => u.id === id);
+  if (!user) return res.status(404).json({ error: "not found" });
+  res.json(user);
+});
+
+app.listen(PORT, () => console.log(`listening on ${PORT}`));
