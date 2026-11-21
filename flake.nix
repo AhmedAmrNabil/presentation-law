@@ -36,7 +36,7 @@
           ];
 
           shellHook = ''
-            echo "🛡️  SecDevOps Environment Loaded"
+            echo "SecDevOps Environment Loaded"
             echo "   Node:    $(node --version)"
             echo "   pnpm:    $(pnpm --version)"
             echo "   Tools:   gitleaks, hadolint, trivy, gh"
