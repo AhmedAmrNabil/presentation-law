@@ -55,3 +55,6 @@ This repository demonstrates an automated DevSecOps CI/CD pipeline integrated wi
      * **Trivy** flags Kubernetes `privileged: true` and `hostNetwork: true`.
 4. **Takeaway:**
    * Security gates automatically block non-compliant code before deployment, achieving true **Shift-Left Security**.
+
+
+falco kubernetes, sonar cube, hashicorp vault, checkov, snyk, owasp zap
