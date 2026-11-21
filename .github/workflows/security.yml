@@ -63,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Scan Dockerfile and k8s manifests
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           scan-ref: .
@@ -72,7 +72,7 @@ jobs:
       - name: Build image
         run: docker build -t demo-app:${{ github.sha }} .
       - name: Scan image for CVEs
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: demo-app:${{ github.sha }}
           severity: HIGH,CRITICAL
@@ -91,11 +91,9 @@ jobs:
           docker run -d --name app --network host demo-app
           for i in $(seq 1 20); do curl -sf localhost:3000/health && break || sleep 1; done
       - name: ZAP baseline scan
-        uses: zaproxy/action-baseline@v0.12.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: http://localhost:3000
-          network_name: host
           cmd_options: '-m 1 -T 1'
           allow_issue_writing: false
           fail_action: false
-          artifact_name: zap-report
