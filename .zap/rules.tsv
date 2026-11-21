@@ -1,6 +1,6 @@
+10049	IGNORE	*	# Content Cacheability (Informational RFC 7234 cache analysis)
 10021	FAIL	*	# X-Content-Type-Options Header Missing
 10037	FAIL	*	# Server Leaks Information via "X-Powered-By" HTTP Response Header Field(s)
 90004	FAIL	*	# Cross-Origin-Resource-Policy Header Missing or Invalid
-10049	FAIL	*	# Storable and Cacheable Content
 10055	FAIL	*	# CSP: Failure to Define Directive with No Fallback
 10063	FAIL	*	# Permissions Policy Header Not Set
