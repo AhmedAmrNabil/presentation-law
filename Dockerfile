@@ -1,17 +1,5 @@
-# ---- build stage ----
-FROM node:24-alpine AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev
-COPY app.js ./
-
-# ---- runtime stage ----
-FROM node:24-alpine
-ENV NODE_ENV=production
-WORKDIR /app
-COPY --from=build --chown=node:node /app ./
-# npm is not needed at runtime; removing it shrinks the attack surface
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
-USER node
+FROM node:latest
+ADD . /app
+RUN cd /app && npm install
 EXPOSE 3000
-CMD ["node", "app.js"]
+CMD ["node", "/app/app.js"]
