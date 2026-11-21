@@ -11,7 +11,33 @@ const users = [
   { id: 2, name: "bob" },
 ];
 
-app.use(helmet()); // HTTP security headers
+// Security headers with strict CSP (all directives have explicit fallbacks)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'"],
+        imgSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+        baseUri: ["'self'"],
+        objectSrc: ["'none'"],
+      },
+    },
+  })
+);
+
+// Prevent caching of sensitive data & set permissions policy
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
+  next();
+});
+
 app.use(rateLimit({ windowMs: 60_000, limit: 100 })); // basic rate limiting
 app.use(express.json());
 
@@ -28,6 +54,11 @@ app.get("/users/:id", (req, res) => {
   const user = users.find((u) => u.id === id);
   if (!user) return res.status(404).json({ error: "not found" });
   res.json(user);
+});
+
+// JSON 404 handler for unknown routes (e.g. /robots.txt, /sitemap.xml)
+app.use((req, res) => {
+  res.status(404).json({ error: "not found" });
 });
 
 app.listen(PORT, () => console.log(`listening on ${PORT}`));
