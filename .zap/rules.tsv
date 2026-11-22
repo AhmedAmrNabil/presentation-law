@@ -1,6 +1,7 @@
-10049	IGNORE	*	# Content Cacheability (Informational RFC 7234 cache analysis)
-10021	FAIL	*	# X-Content-Type-Options Header Missing
-10037	FAIL	*	# Server Leaks Information via "X-Powered-By" HTTP Response Header Field(s)
-90004	FAIL	*	# Cross-Origin-Resource-Policy Header Missing or Invalid
-10055	FAIL	*	# CSP: Failure to Define Directive with No Fallback
-10063	FAIL	*	# Permissions Policy Header Not Set
+10049	IGNORE	*	# Content Cacheability (ignored - no cache checking)
+10063	IGNORE	*	# Permissions Policy Header Not Set (ignored)
+10021	FAIL	*	# X-Content-Type-Options Header Missing (set by Helmet)
+10037	FAIL	*	# Server Leaks Information via "X-Powered-By" (stripped by Helmet)
+10038	FAIL	*	# Content Security Policy (CSP) Header Not Set (set by Helmet)
+10020	FAIL	*	# Anti-clickjacking Header Not Set (set by Helmet)
+90004	FAIL	*	# Cross-Origin-Resource-Policy Header Missing or Invalid (set by Helmet)

@@ -11,32 +11,7 @@ const users = [
   { id: 2, name: "bob" },
 ];
 
-// Security headers with strict CSP (all directives have explicit fallbacks)
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'"],
-        imgSrc: ["'self'"],
-        frameAncestors: ["'none'"],
-        formAction: ["'self'"],
-        baseUri: ["'self'"],
-        objectSrc: ["'none'"],
-      },
-    },
-  })
-);
-
-// Prevent caching of sensitive data & set permissions policy
-app.use((req, res, next) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
-  next();
-});
+app.use(helmet());
 
 app.use(rateLimit({ windowMs: 60_000, limit: 100 })); // basic rate limiting
 app.use(express.json());
