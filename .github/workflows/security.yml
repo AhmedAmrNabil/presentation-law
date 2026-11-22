@@ -2,7 +2,7 @@ name: Security checks
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, vulnerable]
   push:
     branches: [main]
   workflow_dispatch:
