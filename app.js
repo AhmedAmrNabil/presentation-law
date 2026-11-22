@@ -11,6 +11,27 @@ const users = [
   { id: 2, name: "bob" },
 ];
 
+const db = {
+  query: (sql, ...args) => {
+    if (args.length > 0) {
+      const ids = args.flat(Infinity).map(Number).filter((n) => !isNaN(n));
+      return users.filter((u) => ids.includes(u.id));
+    }
+    if (typeof sql === "string") {
+      if (/\b1\s*=\s*1\b/i.test(sql) || /or\s+['"]?1['"]?\s*=\s*['"]?1/i.test(sql)) {
+        return users;
+      }
+      const match = sql.match(/id\s*=\s*['"]?(\d+)['"]?/i);
+      if (match) {
+        const id = Number(match[1]);
+        const user = users.find((u) => u.id === id);
+        if (user) return user;
+      }
+    }
+    return { error: "not found" };
+  },
+};
+
 app.use(helmet());
 
 app.use(rateLimit({ windowMs: 60_000, limit: 100 })); // basic rate limiting
@@ -26,9 +47,9 @@ app.get("/greet", (req, res) => {
 
 app.get("/users/:id", (req, res) => {
   const id = Number.parseInt(req.params.id, 10); // validated input
-  const user = users.find((u) => u.id === id);
-  if (!user) return res.status(404).json({ error: "not found" });
-  res.json(user);
+  const result = db.query("SELECT * FROM users WHERE id = ?", [id]);
+  if (!result || result.length === 0) return res.status(404).json({ error: "not found" });
+  res.json(result[0]);
 });
 
 // JSON 404 handler for unknown routes (e.g. /robots.txt, /sitemap.xml)
