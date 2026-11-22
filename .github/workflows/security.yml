@@ -49,79 +49,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      - name: Comment SonarQube findings on PR
+      - name: Wait for SonarCloud analysis
         if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          sleep 5
-          node -e '
-            const fs = require("fs");
-            const cp = require("child_process");
-
-            const prNumber = process.env.PR_NUMBER;
-            const projectKey = "AhmedAmrNabil_presentation-law";
-            const repo = process.env.REPO;
-
-            async function run() {
-              const url = `https://sonarcloud.io/api/issues/search?projects=${projectKey}&pullRequest=${prNumber}&resolved=false`;
-              const res = await fetch(url, {
-                headers: process.env.SONAR_TOKEN ? { Authorization: `Bearer ${process.env.SONAR_TOKEN}` } : {}
-              });
-              if (!res.ok) {
-                console.log("Could not fetch SonarCloud issues:", res.status, res.statusText);
-                return;
-              }
-              const data = await res.json();
-              const issues = data.issues || [];
-
-              let md = "<!-- sonarcloud-report -->\n## 🔍 SonarQube / SonarCloud Code Analysis Report\n\n";
-
-              if (issues.length === 0) {
-                md += "✅ **Quality Gate Passed!** No open vulnerabilities or code smells detected on this Pull Request.\n";
-              } else {
-                const vulnCount = issues.filter(i => i.type === "VULNERABILITY").length;
-                const bugCount = issues.filter(i => i.type === "BUG").length;
-                const smellCount = issues.filter(i => i.type === "CODE_SMELL").length;
-
-                md += `⚠️ **Found ${issues.length} issue(s)** (${vulnCount} Vulnerabilities, ${bugCount} Bugs, ${smellCount} Code Smells)\n\n`;
-                md += "| Severity | Type | Location | Issue Message |\n";
-                md += "| :--- | :--- | :--- | :--- |\n";
-
-                for (const i of issues) {
-                  const file = i.component.split(":").pop();
-                  const loc = i.line ? `\`${file}:${i.line}\`` : `\`${file}\``;
-                  const sevIcon = i.severity === "BLOCKER" ? "🛑 **BLOCKER**" :
-                                  i.severity === "CRITICAL" ? "🔴 **CRITICAL**" :
-                                  i.severity === "MAJOR" ? "🟠 **MAJOR**" :
-                                  i.severity === "MINOR" ? "🟡 **MINOR**" : "ℹ️ **INFO**";
-                  md += `| ${sevIcon} | \`${i.type}\` | ${loc} | ${i.message} |\n`;
-                }
-              }
-
-              md += `\n> 🔗 [View full interactive report on SonarCloud](https://sonarcloud.io/project/issues?id=${projectKey}&pullRequest=${prNumber}&resolved=false)\n`;
-              fs.writeFileSync("sonar_report.md", md);
-
-              try {
-                const comments = JSON.parse(cp.execSync(`gh pr view ${prNumber} --json comments`, { encoding: "utf8" })).comments;
-                const existing = comments.find(c => c.body && c.body.includes("<!-- sonarcloud-report -->"));
-                if (existing) {
-                  cp.execSync(`gh api repos/${repo}/issues/comments/${existing.id} -X PATCH -F body=@sonar_report.md`);
-                  console.log("Updated existing SonarQube PR comment.");
-                } else {
-                  cp.execSync(`gh pr comment ${prNumber} --body-file=sonar_report.md`);
-                  console.log("Posted new SonarQube PR comment.");
-                }
-              } catch (e) {
-                console.error("Failed to post/update comment via gh CLI:", e.message);
-              }
-            }
-
-            run();
-          '
+        run: sleep 5
+      - name: SonarQube Quality Gate Report
+        if: github.event_name == 'pull_request'
+        uses: phwt/sonarqube-quality-gate-action@e8842ff65b97bfa4fd4effe3ab0909f568d16e91 # v1.7.0
+        with:
+          sonar-project-key: AhmedAmrNabil_presentation-law
+          sonar-host-url: https://sonarcloud.io
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request: ${{ github.event.pull_request.number }}
 
   dockerfile-lint:
     name: Dockerfile lint (Hadolint)
