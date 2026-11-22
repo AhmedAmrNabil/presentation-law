@@ -10,20 +10,13 @@ spec:
     metadata:
       labels: { app: demo-app }
     spec:
-      automountServiceAccountToken: false
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        seccompProfile: { type: RuntimeDefault }
+      hostNetwork: true
       containers:
         - name: app
-          image: ghcr.io/ahmedamrnabil/presentation-law:1.0.0
+          image: ghcr.io/ahmedamrnabil/presentation-law:latest
           ports:
             - containerPort: 3000
           securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities: { drop: ["ALL"] }
-          resources:
-            requests: { cpu: 100m, memory: 128Mi }
-            limits: { cpu: 500m, memory: 256Mi }
+            privileged: true
+            runAsUser: 0
+            allowPrivilegeEscalation: true
