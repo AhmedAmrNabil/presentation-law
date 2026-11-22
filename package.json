@@ -10,8 +10,9 @@
     "node": ">=20"
   },
   "dependencies": {
+    "defu": "^6.1.7",
     "express": "^4.21.2",
-    "lodash": "4.17.15",
-    "minimist": "1.2.0"
+    "express-rate-limit": "8.7.2",
+    "helmet": "^8.0.0"
   }
 }

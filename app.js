@@ -1,13 +1,13 @@
 const express = require("express");
-const _ = require("lodash");
-const { exec } = require("child_process");
-const argv = require("minimist")(process.argv.slice(2));
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const { execFile } = require("child_process");
+const { defu } = require("defu");
 
 const app = express();
-const PORT = argv.port || process.env.PORT || 3000;
-
-// VULN 1: hardcoded secret (Gitleaks target)
-const API_KEY = "9f8a7c6d5e4b3a2f1e0d9c8b7a6f5e4d3c2b1a09";
+const portArg = process.argv.find((arg) => arg.startsWith("--port="));
+const PORT = portArg ? Number(portArg.split("=")[1]) : process.env.PORT || 3000;
+const API_KEY = process.env.API_KEY || ""; // secrets managed via environment variables
 
 const users = [
   { id: 1, name: "alice" },
@@ -18,13 +18,13 @@ const defaults = { theme: "light" };
 
 const db = {
   query: (sql, ...args) => {
-    // Simulated parameterized query with args: query("SELECT ... WHERE id = ?", [1]) or query("...", 1)
+    // Parameterized query: checks IDs in arguments
     if (args.length > 0) {
       const ids = args.flat(Infinity).map(Number).filter((n) => !isNaN(n));
       return users.filter((u) => ids.includes(u.id));
     }
 
-    // Handle query("string"): e.g. "SELECT * FROM users WHERE id = 1"
+    // String query
     if (typeof sql === "string") {
       if (/\b1\s*=\s*1\b/i.test(sql) || /or\s+['"]?1['"]?\s*=\s*['"]?1/i.test(sql)) {
         return users;
@@ -40,6 +40,8 @@ const db = {
   },
 };
 
+app.use(helmet());
+app.use(rateLimit({ windowMs: 60_000, limit: 100 }));
 app.use(express.json());
 
 app.get("/", (req, res) => res.json({ app: "secdevops-demo", status: "ok" }));
@@ -50,27 +52,39 @@ app.get("/greet", (req, res) => {
   res.json({ message: `Hello, ${name}!` });
 });
 
-// VULN 2: eval on user input (Semgrep / SAST: code injection)
+// Add endpoint: validates numbers and computes sum without eval
 app.get("/add/:a/:b", (req, res) => {
-  res.json({ result: eval(req.params.a + "+" + req.params.b) });
+  const a = Number(req.params.a);
+  const b = Number(req.params.b);
+  if (Number.isNaN(a) || Number.isNaN(b)) {
+    return res.status(400).json({ error: "both a and b must be numbers" });
+  }
+  res.json({ result: a + b });
 });
 
-// VULN 3: SQL built by string concatenation (SAST: SQL injection)
+// User lookup endpoint: safe parameterized query
 app.get("/users/:id", (req, res) => {
-  const sql = "SELECT * FROM users WHERE id = " + req.params.id;
-  const result = db.query(sql);
-  if (result && result.error) return res.status(404).json(result);
-  res.json(result);
+  const id = Number.parseInt(req.params.id, 10);
+  const result = db.query("SELECT * FROM users WHERE id = ?", [id]);
+  if (!result || result.length === 0) return res.status(404).json({ error: "not found" });
+  res.json(result[0]);
 });
 
-// VULN 4: OS command injection (SAST: command execution)
+// Ping endpoint: strict hostname validation with safe execFile
 app.get("/ping", (req, res) => {
-  exec("ping -c 1 " + req.query.host, (err, out) => res.send(out));
+  const host = String(req.query.host || "");
+  if (!/^[a-zA-Z0-9.-]+$/.test(host) || host.length > 253) {
+    return res.status(400).json({ error: "invalid host" });
+  }
+  execFile("ping", ["-c", "1", host], { timeout: 3000 }, (err, stdout) => {
+    if (err) return res.status(502).json({ error: "ping failed" });
+    res.send(stdout);
+  });
 });
 
-// VULN 5: prototype pollution via vulnerable lodash.merge (SCA target)
+// Settings endpoint: safe merge using defu (built-in prototype pollution protection)
 app.post("/settings", (req, res) => {
-  res.json(_.merge({}, defaults, req.body));
+  res.json(defu(req.body, defaults));
 });
 
 // JSON 404 handler for unknown routes (e.g. /robots.txt, /sitemap.xml)
@@ -78,5 +92,4 @@ app.use((req, res) => {
   res.status(404).json({ error: "not found" });
 });
 
-// VULN 6: missing helmet & security headers (DAST: OWASP ZAP target)
 app.listen(PORT, () => console.log(`listening on ${PORT}`));
