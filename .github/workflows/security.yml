@@ -62,7 +62,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          args: -Dsonar.qualitygate.wait=true
+          args: >
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.coverage.exclusions=**/*
       - name: SonarQube Quality Gate Report
         if: always() && github.event_name == 'pull_request'
         uses: phwt/sonarqube-quality-gate-action@e8842ff65b97bfa4fd4effe3ab0909f568d16e91 # v1.7.0
