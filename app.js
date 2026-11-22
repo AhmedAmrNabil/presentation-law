@@ -45,6 +45,16 @@ app.get("/greet", (req, res) => {
   res.json({ message: `Hello, ${name}!` });
 });
 
+// Add endpoint: validates numbers and computes sum without eval
+app.get("/add/:a/:b", (req, res) => {
+  const a = Number(req.params.a);
+  const b = Number(req.params.b);
+  if (Number.isNaN(a) || Number.isNaN(b)) {
+    return res.status(400).json({ error: "both a and b must be numbers" });
+  }
+  res.json({ result: a + b });
+});
+
 app.get("/users/:id", (req, res) => {
   const id = Number.parseInt(req.params.id, 10); // validated input
   const result = db.query("SELECT * FROM users WHERE id = ?", [id]);
