@@ -8,7 +8,7 @@ It shows "shift-left" security: mistakes are found in minutes, before the code i
 | Branch | What it contains | Pipeline |
 |---|---|---|
 | `main` | The safe version of the app | All checks pass |
-| `vulnerable` | The same features with seven planted vulnerabilities | Checks fail |
+| `vulnerable` | The same features with seven planted vulnerabilities in the code, plus an unsafe container setup | Checks fail |
 | `fix-vulnerabilities` | The vulnerable branch with every problem fixed | All checks pass |
 
 ## The pipeline
@@ -44,15 +44,16 @@ All checks run in parallel, so a pull request shows every problem at once. The i
 
 | # | Vulnerability | Where | Caught by |
 |---|---|---|---|
-| 1 | Hardcoded admin API key | `app.js` | Gitleaks, security tests |
+| 1 | Hardcoded admin API key | `app.js` | Gitleaks, SonarCloud, security tests |
 | 2 | No security headers, no rate limit | `app.js` | OWASP ZAP, security tests |
 | 3 | Outdated lodash with known CVEs | `package.json` | Snyk |
 | 4 | Code injection with `eval` | `/add/:a/:b` | SonarCloud, security tests |
-| 5 | SQL injection | `/users/:id` | Security tests |
+| 5 | SQL injection | `/users/:id` | SonarCloud, security tests |
 | 6 | Command injection through a shell | `/ping` | SonarCloud, security tests |
-| 7 | Root container, privileged pod, host network | `Dockerfile`, `k8s/deployment.yaml` | Trivy |
+| 7 | Root container, privileged pod, host network | `Dockerfile`, `k8s/deployment.yaml` | Trivy config, SonarCloud |
+| 8 | Large `node:latest` base image with known CVEs | `Dockerfile` | Trivy image scan |
 
-No single tool catches everything. SQL injection, for example, is caught only by the security tests.
+No single tool catches everything. The missing rate limit, for example, is caught only by the security tests, and only Snyk reports the outdated library.
 
 ## Try the attacks
 
