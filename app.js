@@ -1,12 +1,13 @@
 "use strict";
 
-const dns = require("node:dns").promises;
+const { exec } = require("node:child_process");
 const { DatabaseSync } = require("node:sqlite");
 const express = require("express");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
+const _ = require("lodash");
 
-// A small in-memory database. Emails are private: only the admin endpoint may show them.
+// VULNERABILITY 1: hardcoded secret. Anyone who can read the repository can use the admin endpoint.
+const API_KEY = "adm_7Fq2Lx9Rv4Tb8Np1Wz6Ke3Hc5Mj0Ys";
+
 function createDatabase() {
   const db = new DatabaseSync(":memory:");
   db.exec(`
@@ -19,69 +20,43 @@ function createDatabase() {
   return db;
 }
 
-// A hostname is dot-separated labels of letters, digits and inner hyphens
-function isHostname(value) {
-  if (value.length === 0 || value.length > 253) return false;
-  return value.split(".").every((label) => /^[a-z0-9-]{1,63}$/i.test(label) && !label.startsWith("-") && !label.endsWith("-"));
-}
-
-function createApp({ apiKey = process.env.API_KEY, requestsPerMinute = 100 } = {}) {
+// The options are accepted but ignored: there is no rate limit and the key is hardcoded
+function createApp() {
   const app = express();
   const db = createDatabase();
-  const findUser = db.prepare("SELECT id, name FROM users WHERE id = ?");
-  const allUsers = db.prepare("SELECT id, name, email FROM users");
 
-  app.use(helmet()); // security headers, and no X-Powered-By
-  app.use(rateLimit({ windowMs: 60_000, limit: requestsPerMinute, standardHeaders: "draft-8", legacyHeaders: false }));
+  // VULNERABILITY 2: no Helmet and no rate limiter, so no security headers and unlimited requests
   app.use(express.json());
 
   app.get("/", (req, res) => res.json({ app: "secdevops-demo", status: "ok" }));
   app.get("/health", (req, res) => res.json({ healthy: true }));
 
+  // VULNERABILITY 3: outdated dependency. lodash 4.17.15 has known high-severity CVEs.
   app.get("/greet", (req, res) => {
-    const name = String(req.query.name || "world").slice(0, 50);
+    const name = _.capitalize(String(req.query.name || "world").slice(0, 50));
     res.json({ message: `Hello, ${name}!` });
   });
 
-  // Calculator: the inputs must be numbers, nothing is executed
+  // VULNERABILITY 4: code injection. eval runs whatever is in the URL as JavaScript.
   app.get("/add/:a/:b", (req, res) => {
-    const a = Number(req.params.a);
-    const b = Number(req.params.b);
-    if (!Number.isFinite(a) || !Number.isFinite(b)) {
-      return res.status(400).json({ error: "a and b must be numbers" });
-    }
-    res.json({ result: a + b });
+    res.json({ result: eval(req.params.a + "+" + req.params.b) });
   });
 
-  // User lookup: the ID must be digits, and it is sent to the database separately from the SQL
+  // VULNERABILITY 5: SQL injection. The ID is pasted into the SQL text.
   app.get("/users/:id", (req, res) => {
-    if (!/^\d{1,9}$/.test(req.params.id)) {
-      return res.status(400).json({ error: "id must be a number" });
-    }
-    const user = findUser.get(Number(req.params.id));
-    if (!user) return res.status(404).json({ error: "not found" });
-    res.json(user);
+    const rows = db.prepare("SELECT id, name FROM users WHERE id = " + req.params.id).all();
+    if (rows.length === 0) return res.status(404).json({ error: "not found" });
+    res.json(rows.length === 1 ? rows[0] : rows);
   });
 
-  // Host check: no shell and no external program, just a DNS lookup of a valid hostname
-  app.get("/ping", async (req, res) => {
-    const host = String(req.query.host || "");
-    if (!isHostname(host)) return res.status(400).json({ error: "invalid host" });
-    try {
-      const { address } = await dns.lookup(host);
-      res.json({ host, address });
-    } catch {
-      res.status(404).json({ error: "host not found" });
-    }
+  // VULNERABILITY 6: command injection. The host is pasted into a shell command.
+  app.get("/ping", (req, res) => {
+    exec("ping -c 1 " + req.query.host, (err, stdout, stderr) => res.type("text").send(stdout + stderr));
   });
 
-  // Admin: the key comes from the environment. Without one, the endpoint is switched off.
   app.get("/admin/users", (req, res) => {
-    if (!apiKey) return res.status(503).json({ error: "admin is disabled" });
-    if (req.get("x-api-key") !== apiKey) {
-      return res.status(401).json({ error: "invalid api key" });
-    }
-    res.json(allUsers.all());
+    if (req.get("x-api-key") !== API_KEY) return res.status(401).json({ error: "invalid api key" });
+    res.json(db.prepare("SELECT id, name, email FROM users").all());
   });
 
   app.use((req, res) => res.status(404).json({ error: "not found" }));
@@ -89,9 +64,9 @@ function createApp({ apiKey = process.env.API_KEY, requestsPerMinute = 100 } = {
   return app;
 }
 
-module.exports = { createApp };
-
 if (require.main === module) {
-  const port = Number(process.env.PORT) || 3000;
-  createApp().listen(port, () => console.log(`listening on ${port}`));
+  const port = process.env.PORT || 3000;
+  createApp().listen(port, () => console.log(`listening on port ${port}`));
 }
+
+module.exports = { createApp };
