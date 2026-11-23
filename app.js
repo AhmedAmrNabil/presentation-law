@@ -86,12 +86,6 @@ function createApp({ apiKey = process.env.API_KEY, requestsPerMinute = 100 } = {
 
   app.use((req, res) => res.status(404).json({ error: "not found" }));
 
-  // Never send stack traces to the client
-  app.use((err, req, res, next) => {
-    console.error(err);
-    res.status(500).json({ error: "internal error" });
-  });
-
   return app;
 }
 
