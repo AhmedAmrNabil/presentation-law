@@ -1,6 +1,5 @@
 "use strict";
 
-const crypto = require("node:crypto");
 const dns = require("node:dns").promises;
 const { DatabaseSync } = require("node:sqlite");
 const express = require("express");
@@ -18,12 +17,6 @@ function createDatabase() {
       (3, 'carol', 'carol@example.com');
   `);
   return db;
-}
-
-// Compare secrets in constant time, so the response time does not reveal how much of the key was right
-function sameSecret(given, expected) {
-  const digest = (value) => crypto.createHash("sha256").update(String(value)).digest();
-  return crypto.timingSafeEqual(digest(given), digest(expected));
 }
 
 // A hostname is dot-separated labels of letters, digits and inner hyphens
@@ -85,7 +78,7 @@ function createApp({ apiKey = process.env.API_KEY, requestsPerMinute = 100 } = {
   // Admin: the key comes from the environment. Without one, the endpoint is switched off.
   app.get("/admin/users", (req, res) => {
     if (!apiKey) return res.status(503).json({ error: "admin is disabled" });
-    if (!sameSecret(req.get("x-api-key") || "", apiKey)) {
+    if (req.get("x-api-key") !== apiKey) {
       return res.status(401).json({ error: "invalid api key" });
     }
     res.json(allUsers.all());
