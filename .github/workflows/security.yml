@@ -2,9 +2,9 @@ name: Security pipeline
 
 on:
   pull_request:
-    branches: [main, vulnerable]
+    branches: [main, vulnerable, demo-v2, demo-v2-vulnerable]
   push:
-    branches: [main]
+    branches: [main, demo-v2]
   workflow_dispatch:
 
 permissions:
